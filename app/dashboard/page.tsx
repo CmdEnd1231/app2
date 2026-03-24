@@ -86,17 +86,31 @@ export default function DashboardPage() {
     return entries.filter((entry) => isEntryInMonth(entry.work_date, selectedMonth))
   }, [entries, selectedMonth])
 
+  const projectSummaries = useMemo(() => {
+    return projects.map((project) => {
+      const projectEntries = filteredEntries.filter((entry) => entry.project_id === project.id)
+      const billableHours = projectEntries.filter((entry) => entry.billable).reduce((sum, entry) => sum + Number(entry.hours), 0)
+      const amount = billableHours * Number(project.hourly_rate)
+      const entriesCount = projectEntries.length
+      return {
+        project,
+        billableHours,
+        amount,
+        entriesCount,
+      }
+    })
+  }, [filteredEntries, projects])
+
   const metrics = useMemo(() => {
     const totalHours = filteredEntries.reduce((sum, entry) => sum + Number(entry.hours), 0)
-    const totalAmount = projects.reduce((sum, project) => {
-      const projectHours = filteredEntries
-        .filter((entry) => entry.project_id === project.id && entry.billable)
-        .reduce((acc, entry) => acc + Number(entry.hours), 0)
-      return sum + projectHours * Number(project.hourly_rate)
-    }, 0)
+    const totalAmount = projectSummaries.reduce((sum, item) => sum + item.amount, 0)
+    const unpaidAmount = projectSummaries
+      .filter((item) => (item.project.payment_status ?? 'unpaid') !== 'paid')
+      .reduce((sum, item) => sum + item.amount, 0)
+    const paidProjects = projects.filter((project) => (project.payment_status ?? 'unpaid') === 'paid').length
 
-    return { totalHours, totalAmount }
-  }, [filteredEntries, projects])
+    return { totalHours, totalAmount, unpaidAmount, paidProjects }
+  }, [filteredEntries, projectSummaries, projects])
 
   if (loading) {
     return <main className="flex min-h-screen items-center justify-center text-sm text-slate-500">Se încarcă dashboardul...</main>
@@ -109,7 +123,7 @@ export default function DashboardPage() {
       title="Dashboard"
       subtitle={
         profile?.full_name
-          ? `Salut, ${profile.full_name}. Vezi rapid proiectele și totalurile pentru ${currentMonthLabel}.`
+          ? `Salut, ${profile.full_name}. Vezi rapid proiectele, orele și totalurile pentru ${currentMonthLabel}.`
           : `Privire de ansamblu pentru ${currentMonthLabel}.`
       }
     >
@@ -126,10 +140,10 @@ export default function DashboardPage() {
             ))}
           </Select>
         </div>
-        <p className="text-sm text-slate-500">Totalurile și cardurile proiectelor sunt calculate pe luna selectată.</p>
+        <p className="text-sm text-slate-500">Toate cardurile și totalurile de mai jos se actualizează pe luna selectată.</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card className="p-5">
           <p className="text-sm text-slate-500">Ore totale</p>
           <p className="mt-2 text-3xl font-semibold text-slate-950">{formatHours(metrics.totalHours)}h</p>
@@ -139,21 +153,21 @@ export default function DashboardPage() {
           <p className="mt-2 text-3xl font-semibold text-slate-950">{formatCurrency(metrics.totalAmount)}</p>
         </Card>
         <Card className="p-5">
-          <p className="text-sm text-slate-500">Proiecte active</p>
-          <p className="mt-2 text-3xl font-semibold text-slate-950">{projects.filter((p) => p.status === 'active').length}</p>
+          <p className="text-sm text-slate-500">Încă de plătit</p>
+          <p className="mt-2 text-3xl font-semibold text-slate-950">{formatCurrency(metrics.unpaidAmount)}</p>
+        </Card>
+        <Card className="p-5">
+          <p className="text-sm text-slate-500">Proiecte marcate plătite</p>
+          <p className="mt-2 text-3xl font-semibold text-slate-950">{paidProjectsLabel(metrics.paidProjects, projects.length)}</p>
         </Card>
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <section className="space-y-5">
-          {projects.length ? (
-            projects.map((project) => {
-              const hours = filteredEntries
-                .filter((entry) => entry.project_id === project.id && entry.billable)
-                .reduce((sum, entry) => sum + Number(entry.hours), 0)
-              const amount = hours * Number(project.hourly_rate)
-              return <ProjectCard key={project.id} project={project} hours={hours} amount={amount} />
-            })
+          {projectSummaries.length ? (
+            projectSummaries.map(({ project, billableHours, amount }) => (
+              <ProjectCard key={project.id} project={project} hours={billableHours} amount={amount} />
+            ))
           ) : (
             <Card className="p-6 text-sm text-slate-500">Nu ai încă proiecte. Creează primul proiect din panoul din dreapta.</Card>
           )}
@@ -162,4 +176,8 @@ export default function DashboardPage() {
       </div>
     </AppShell>
   )
+}
+
+function paidProjectsLabel(paidCount: number, totalCount: number) {
+  return totalCount ? `${paidCount}/${totalCount}` : '0'
 }

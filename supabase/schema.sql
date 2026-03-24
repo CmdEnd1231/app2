@@ -20,8 +20,13 @@ create table if not exists public.projects (
   hourly_rate numeric(10,2) not null default 0,
   currency text not null default 'RON',
   status text not null default 'active' check (status in ('active', 'paused', 'closed')),
+  payment_status text not null default 'unpaid' check (payment_status in ('unpaid', 'partial', 'paid')),
   created_at timestamptz not null default now()
 );
+
+alter table public.projects add column if not exists payment_status text not null default 'unpaid';
+alter table public.projects drop constraint if exists projects_payment_status_check;
+alter table public.projects add constraint projects_payment_status_check check (payment_status in ('unpaid', 'partial', 'paid'));
 
 create table if not exists public.project_viewers (
   id uuid primary key default gen_random_uuid(),

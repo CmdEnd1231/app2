@@ -12,11 +12,13 @@ export function TimeEntryForm({ projectId, onCreated }: { projectId: string; onC
   const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setLoading(true)
     setError(null)
+    setSuccess(null)
 
     try {
       const supabase = createClient()
@@ -39,6 +41,7 @@ export function TimeEntryForm({ projectId, onCreated }: { projectId: string; onC
       setHours('1')
       setCategory('project management')
       setNotes('')
+      setSuccess('Orele au fost salvate.')
       await onCreated()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Nu am putut salva intrarea.')
@@ -68,6 +71,7 @@ export function TimeEntryForm({ projectId, onCreated }: { projectId: string; onC
           <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Ce ai făcut efectiv în sesiunea de lucru." />
         </div>
         <Button type="submit" disabled={loading}>{loading ? 'Se salvează...' : 'Salvează orele'}</Button>
+        {success ? <p className="text-sm text-emerald-600">{success}</p> : null}
         {error ? <p className="text-sm text-rose-600">{error}</p> : null}
       </form>
     </Card>

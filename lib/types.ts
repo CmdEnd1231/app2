@@ -1,4 +1,5 @@
 export type Role = 'admin' | 'viewer'
+export type PaymentStatus = 'unpaid' | 'partial' | 'paid'
 
 export type Profile = {
   id: string
@@ -16,6 +17,7 @@ export type Project = {
   hourly_rate: number
   currency: string
   status: 'active' | 'paused' | 'closed'
+  payment_status?: PaymentStatus
   created_at: string
 }
 

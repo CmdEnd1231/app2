@@ -1,4 +1,5 @@
 import { clsx, type ClassValue } from 'clsx'
+import type { PaymentStatus, Project } from '@/lib/types'
 
 export function cn(...inputs: ClassValue[]) {
   return clsx(inputs)
@@ -60,4 +61,32 @@ export function statusLabel(status: 'active' | 'paused' | 'closed') {
     default:
       return status
   }
+}
+
+export function paymentStatusLabel(status: PaymentStatus = 'unpaid') {
+  switch (status) {
+    case 'paid':
+      return 'plătit'
+    case 'partial':
+      return 'plată parțială'
+    case 'unpaid':
+    default:
+      return 'neplătit'
+  }
+}
+
+export function paymentStatusClasses(status: PaymentStatus = 'unpaid') {
+  switch (status) {
+    case 'paid':
+      return 'border-emerald-200 bg-emerald-50 text-emerald-700'
+    case 'partial':
+      return 'border-amber-200 bg-amber-50 text-amber-700'
+    case 'unpaid':
+    default:
+      return 'border-rose-200 bg-rose-50 text-rose-700'
+  }
+}
+
+export function getProjectPaymentStatus(project: Project) {
+  return project.payment_status ?? 'unpaid'
 }

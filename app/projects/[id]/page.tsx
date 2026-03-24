@@ -7,10 +7,20 @@ import { ArrowLeft } from 'lucide-react'
 
 import { AppShell } from '@/components/app-shell'
 import { TimeEntryForm } from '@/components/time-entry-form'
-import { Badge, Card, Label, Select } from '@/components/ui'
+import { Badge, Button, Card, Label, Select } from '@/components/ui'
 import { createClient } from '@/lib/supabase-browser'
-import type { Project, TimeEntry } from '@/lib/types'
-import { formatCurrency, formatDate, formatHours, getMonthOptions, isEntryInMonth, statusLabel } from '@/lib/utils'
+import type { PaymentStatus, Project, TimeEntry } from '@/lib/types'
+import {
+  formatCurrency,
+  formatDate,
+  formatHours,
+  getMonthOptions,
+  getProjectPaymentStatus,
+  isEntryInMonth,
+  paymentStatusClasses,
+  paymentStatusLabel,
+  statusLabel,
+} from '@/lib/utils'
 
 export default function ProjectPage() {
   const params = useParams<{ id: string }>()
@@ -18,9 +28,12 @@ export default function ProjectPage() {
   const [project, setProject] = useState<Project | null>(null)
   const [entries, setEntries] = useState<TimeEntry[]>([])
   const [loading, setLoading] = useState(true)
+  const [savingStatus, setSavingStatus] = useState(false)
+  const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const monthOptions = getMonthOptions()
   const [selectedMonth, setSelectedMonth] = useState(monthOptions[0]?.value ?? '')
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('unpaid')
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -47,6 +60,7 @@ export default function ProjectPage() {
         .single()
       if (projectError) throw projectError
       setProject(projectData)
+      setPaymentStatus(getProjectPaymentStatus(projectData))
 
       const { data: entriesData, error: entriesError } = await supabase
         .from('time_entries')
@@ -72,10 +86,40 @@ export default function ProjectPage() {
   }, [entries, selectedMonth])
 
   const totals = useMemo(() => {
-    const hours = filteredEntries.filter((entry) => entry.billable).reduce((sum, entry) => sum + Number(entry.hours), 0)
+    const billableEntries = filteredEntries.filter((entry) => entry.billable)
+    const hours = billableEntries.reduce((sum, entry) => sum + Number(entry.hours), 0)
     const amount = project ? hours * Number(project.hourly_rate) : 0
-    return { hours, amount }
+    return {
+      hours,
+      amount,
+      entriesCount: filteredEntries.length,
+    }
   }, [filteredEntries, project])
+
+  async function handlePaymentStatusSave() {
+    if (!project) return
+
+    setSavingStatus(true)
+    setStatusMessage(null)
+    setError(null)
+
+    try {
+      const supabase = createClient()
+      const { error: updateError } = await supabase
+        .from('projects')
+        .update({ payment_status: paymentStatus })
+        .eq('id', project.id)
+
+      if (updateError) throw updateError
+
+      setProject({ ...project, payment_status: paymentStatus })
+      setStatusMessage('Statusul plății a fost actualizat.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Nu am putut salva statusul plății.')
+    } finally {
+      setSavingStatus(false)
+    }
+  }
 
   if (loading) {
     return <main className="flex min-h-screen items-center justify-center text-sm text-slate-500">Se încarcă proiectul...</main>
@@ -85,6 +129,8 @@ export default function ProjectPage() {
     return <main className="flex min-h-screen items-center justify-center text-sm text-slate-500">Proiectul nu există.</main>
   }
 
+  const currentPaymentStatus = getProjectPaymentStatus(project)
+
   return (
     <AppShell title={project.name} subtitle={`Client: ${project.client_name}`}>
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -92,25 +138,42 @@ export default function ProjectPage() {
           <ArrowLeft className="h-4 w-4" /> Înapoi
         </Link>
         <Badge>{statusLabel(project.status)}</Badge>
+        <Badge className={paymentStatusClasses(currentPaymentStatus)}>{paymentStatusLabel(currentPaymentStatus)}</Badge>
       </div>
 
       {error ? <p className="mb-4 text-sm text-rose-600">{error}</p> : null}
+      {statusMessage ? <p className="mb-4 text-sm text-emerald-600">{statusMessage}</p> : null}
 
-      <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <Label>Luna afișată</Label>
-          <Select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="min-w-[220px]">
-            {monthOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </Select>
+      <div className="mb-6 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div>
+            <Label>Luna afișată</Label>
+            <Select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="min-w-[220px]">
+              {monthOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <Label>Status plată</Label>
+            <Select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value as PaymentStatus)}>
+              <option value="unpaid">Neplătit</option>
+              <option value="partial">Plată parțială</option>
+              <option value="paid">Plătit</option>
+            </Select>
+          </div>
+          <div className="flex items-end">
+            <Button type="button" onClick={handlePaymentStatusSave} disabled={savingStatus} className="w-full md:w-auto">
+              {savingStatus ? 'Se salvează...' : 'Salvează status plată'}
+            </Button>
+          </div>
         </div>
         {project.description ? <p className="max-w-2xl text-sm text-slate-500">{project.description}</p> : null}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card className="p-5">
           <p className="text-sm text-slate-500">Tarif / oră</p>
           <p className="mt-2 text-3xl font-semibold text-slate-950">{formatCurrency(project.hourly_rate, project.currency)}</p>
@@ -123,36 +186,47 @@ export default function ProjectPage() {
           <p className="text-sm text-slate-500">Total de plată</p>
           <p className="mt-2 text-3xl font-semibold text-slate-950">{formatCurrency(totals.amount, project.currency)}</p>
         </Card>
+        <Card className="p-5">
+          <p className="text-sm text-slate-500">Intrări în luna selectată</p>
+          <p className="mt-2 text-3xl font-semibold text-slate-950">{totals.entriesCount}</p>
+        </Card>
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
         <Card className="overflow-hidden p-0">
           <div className="border-b border-slate-200 px-6 py-5">
             <h3 className="text-lg font-semibold text-slate-900">Time entries</h3>
-            <p className="mt-1 text-sm text-slate-500">Zi, durată și observații pentru munca depusă pe proiect.</p>
+            <p className="mt-1 text-sm text-slate-500">Zi, durată, categorie, observații și valoare pentru munca depusă.</p>
           </div>
           <div className="divide-y divide-slate-100">
             {filteredEntries.length ? (
-              filteredEntries.map((entry) => (
-                <div key={entry.id} className="grid gap-3 px-6 py-4 md:grid-cols-[140px_90px_140px_1fr]">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-slate-400">Data</p>
-                    <p className="mt-1 text-sm font-medium text-slate-800">{formatDate(entry.work_date)}</p>
+              filteredEntries.map((entry) => {
+                const rowAmount = Number(entry.hours) * Number(project.hourly_rate)
+                return (
+                  <div key={entry.id} className="grid gap-3 px-6 py-4 md:grid-cols-[140px_90px_140px_1fr_140px]">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-slate-400">Data</p>
+                      <p className="mt-1 text-sm font-medium text-slate-800">{formatDate(entry.work_date)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-slate-400">Ore</p>
+                      <p className="mt-1 text-sm font-medium text-slate-800">{formatHours(entry.hours)}h</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-slate-400">Categorie</p>
+                      <p className="mt-1 text-sm font-medium text-slate-800">{entry.category || 'general'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-slate-400">Observații</p>
+                      <p className="mt-1 text-sm text-slate-600">{entry.notes || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-slate-400">Valoare</p>
+                      <p className="mt-1 text-sm font-medium text-slate-800">{formatCurrency(rowAmount, project.currency)}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-slate-400">Ore</p>
-                    <p className="mt-1 text-sm font-medium text-slate-800">{formatHours(entry.hours)}h</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-slate-400">Categorie</p>
-                    <p className="mt-1 text-sm font-medium text-slate-800">{entry.category || 'general'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-slate-400">Observații</p>
-                    <p className="mt-1 text-sm text-slate-600">{entry.notes || '—'}</p>
-                  </div>
-                </div>
-              ))
+                )
+              })
             ) : (
               <div className="px-6 py-8 text-sm text-slate-500">Nu există încă ore adăugate pentru luna selectată.</div>
             )}

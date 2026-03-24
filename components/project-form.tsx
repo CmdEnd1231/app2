@@ -13,11 +13,13 @@ export function ProjectForm({ onCreated }: { onCreated: () => Promise<void> }) {
   const [viewerEmail, setViewerEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setLoading(true)
     setError(null)
+    setSuccess(null)
 
     try {
       const supabase = createClient()
@@ -36,6 +38,7 @@ export function ProjectForm({ onCreated }: { onCreated: () => Promise<void> }) {
           hourly_rate: Number(hourlyRate),
           currency: 'RON',
           status: 'active',
+          payment_status: 'unpaid',
         })
         .select()
         .single()
@@ -62,6 +65,7 @@ export function ProjectForm({ onCreated }: { onCreated: () => Promise<void> }) {
       setHourlyRate('150')
       setDescription('')
       setViewerEmail('')
+      setSuccess('Proiectul a fost creat cu succes.')
       await onCreated()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Nu am putut crea proiectul.')
@@ -95,6 +99,7 @@ export function ProjectForm({ onCreated }: { onCreated: () => Promise<void> }) {
           <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Detalii proiect, limite, context." />
         </div>
         <Button type="submit" disabled={loading}>{loading ? 'Se salvează...' : 'Creează proiect'}</Button>
+        {success ? <p className="text-sm text-emerald-600">{success}</p> : null}
         {error ? <p className="text-sm text-rose-600">{error}</p> : null}
       </form>
     </Card>
